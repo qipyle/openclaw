@@ -94,6 +94,18 @@ export type OpenClawConfig = {
   secrets?: SecretsConfig;
   skills?: SkillsConfig;
   plugins?: PluginsConfig;
+  /** Cybertron WebSocket dialog stream (see docs/providers/cybertron). */
+  cybertron?: {
+    wsUrl?: string;
+    baseUrl?: string;
+    apiPath?: string;
+    robotKey?: string;
+    robotToken?: string;
+    username?: string;
+    appId?: string;
+    connectTimeoutSec?: number;
+    streamTimeoutMin?: number;
+  };
   models?: ModelsConfig;
   nodeHost?: NodeHostConfig;
   agents?: AgentsConfig;

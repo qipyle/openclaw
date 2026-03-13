@@ -302,6 +302,17 @@ describe("getApiKeyForModel", () => {
     });
   });
 
+  it("resolves cybertron from config.cybertron without auth store", async () => {
+    const resolved = await resolveApiKeyForProvider({
+      provider: "cybertron",
+      cfg: { cybertron: { wsUrl: "wss://example.com/ws" } },
+      store: { version: 1, profiles: {} },
+    });
+    expect(resolved.apiKey).toBe("cybertron-config");
+    expect(resolved.source).toContain("config.cybertron");
+    expect(resolved.mode).toBe("api-key");
+  });
+
   it("resolves Vercel AI Gateway API key from env", async () => {
     await withEnvAsync({ [envVar("AI_GATEWAY", "API", "KEY")]: "gateway-test-key" }, async () => {
       // pragma: allowlist secret

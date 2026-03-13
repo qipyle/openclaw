@@ -2,6 +2,7 @@ import path from "node:path";
 import { type Api, getEnvApiKey, type Model } from "@mariozechner/pi-ai";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { readConfigFileSnapshot } from "../config/io.js";
 import type { ModelProviderAuthMode, ModelProviderConfig } from "../config/types.js";
 import { getShellEnvAppliedKeys } from "../infra/shell-env.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -119,11 +120,30 @@ function resolveProviderAuthOverride(
   return undefined;
 }
 
+/** Sentinel used when cybertron auth comes from config.cybertron (no auth-profiles.json). */
+const CYBERTRON_CONFIG_AUTH_MARKER = "cybertron-config";
+
 function resolveSyntheticLocalProviderAuth(params: {
   cfg: OpenClawConfig | undefined;
   provider: string;
 }): ResolvedProviderAuth | null {
   const normalizedProvider = normalizeProviderId(params.provider);
+
+  if (normalizedProvider === "cybertron") {
+    const cybertron = params.cfg?.cybertron;
+    const hasUrl =
+      (typeof cybertron?.wsUrl === "string" && cybertron.wsUrl.trim()) ||
+      (typeof cybertron?.baseUrl === "string" && cybertron.baseUrl.trim());
+    if (hasUrl) {
+      return {
+        apiKey: CYBERTRON_CONFIG_AUTH_MARKER,
+        source: "config.cybertron (no auth store)",
+        mode: "api-key",
+      };
+    }
+    return null;
+  }
+
   if (normalizedProvider !== "ollama") {
     return null;
   }
@@ -221,8 +241,28 @@ export async function resolveApiKeyForProvider(params: {
   store?: AuthProfileStore;
   agentDir?: string;
 }): Promise<ResolvedProviderAuth> {
-  const { provider, cfg, profileId, preferredProfile } = params;
+  let { provider, cfg, profileId, preferredProfile } = params;
   const store = params.store ?? ensureAuthProfileStore(params.agentDir);
+
+  // Cybertron auth comes from config.cybertron; if caller's cfg has no cybertron
+  // (e.g. stale runtime snapshot), load from disk so we never ask for auth-profiles.json.
+  if (normalizeProviderId(provider) === "cybertron") {
+    const hasUrl = (c: OpenClawConfig | undefined) =>
+      Boolean(
+        (typeof c?.cybertron?.wsUrl === "string" && c.cybertron.wsUrl.trim()) ||
+          (typeof c?.cybertron?.baseUrl === "string" && c.cybertron.baseUrl.trim()),
+      );
+    if (!hasUrl(cfg)) {
+      try {
+        const snapshot = await readConfigFileSnapshot();
+        if (snapshot.valid && snapshot.config?.cybertron && hasUrl(snapshot.config)) {
+          cfg = { ...cfg, cybertron: snapshot.config.cybertron };
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   if (profileId) {
     const resolved = await resolveApiKeyForProfile({
@@ -409,6 +449,16 @@ export function resolveModelAuthMode(
 
   if (hasUsableCustomProviderApiKey(cfg, resolved)) {
     return "api-key";
+  }
+
+  if (normalizeProviderId(resolved) === "cybertron") {
+    const cybertron = cfg?.cybertron;
+    const hasUrl =
+      (typeof cybertron?.wsUrl === "string" && cybertron.wsUrl.trim()) ||
+      (typeof cybertron?.baseUrl === "string" && cybertron.baseUrl.trim());
+    if (hasUrl) {
+      return "api-key";
+    }
   }
 
   return "unknown";

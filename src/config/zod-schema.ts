@@ -875,6 +875,30 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    /** Cybertron WebSocket dialog stream; 与 E:\\work\\code\\websocket application.yml 中 websocket.client.systems.cybertron 对应 */
+    cybertron: z
+      .object({
+        /** Direct WebSocket URL（对应 websocket 的 url，如 wss://www.cybotstar.cn/openapi/v1/ws/dialog/）. If set, baseUrl/apiPath are ignored. */
+        wsUrl: z.string().optional(),
+        /** HTTP(S) base URL; converted to wss with apiPath when wsUrl is not set. */
+        baseUrl: z.string().optional(),
+        /** API path appended to baseUrl (default /openapi/v1/ws/dialog/). */
+        apiPath: z.string().optional(),
+        /** 首条消息体 cybertron-robot-key（对应 websocket headers.cybertron-robot-key）. */
+        robotKey: z.string().optional(),
+        /** 首条消息体 cybertron-robot-token（对应 websocket headers.cybertron-robot-token）. */
+        robotToken: z.string().optional(),
+        /** 首条消息体 username（对应 websocket headers.username）. */
+        username: z.string().optional(),
+        /** 可选请求头 cybertron-app-id（对应 websocket headers.cybertron-app-id，如 agent_cyber）. */
+        appId: z.string().optional(),
+        /** Connect timeout in seconds. Default 30. */
+        connectTimeoutSec: z.number().int().positive().optional(),
+        /** Stream timeout in minutes (no flow_exit). Default 20. */
+        streamTimeoutMin: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((cfg, ctx) => {

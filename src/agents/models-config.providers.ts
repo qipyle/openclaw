@@ -66,6 +66,7 @@ import {
   resolveNonEnvSecretRefHeaderValueMarker,
   resolveEnvSecretRefHeaderValueMarker,
 } from "./model-auth-markers.js";
+import { CONTEXT_WINDOW_HARD_MIN_TOKENS } from "./context-window-guard.js";
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
 export { resolveOllamaApiBase } from "./models-config.providers.discovery.js";
 
@@ -813,6 +814,36 @@ async function resolveVllmImplicitProvider(
   };
 }
 
+/** Cybertron WebSocket provider: only when top-level config.cybertron has wsUrl or baseUrl. */
+function resolveCybertronImplicitProvider(
+  ctx: ImplicitProviderContext,
+): Record<string, ProviderConfig> | undefined {
+  const cybertron = ctx.config?.cybertron;
+  if (!cybertron) return undefined;
+  const hasUrl = Boolean(
+    (typeof cybertron.wsUrl === "string" && cybertron.wsUrl.trim()) ||
+      (typeof cybertron.baseUrl === "string" && cybertron.baseUrl.trim()),
+  );
+  if (!hasUrl) return undefined;
+  return {
+    cybertron: {
+      baseUrl: "https://cybertron.openclaw.local",
+      api: "cybertron",
+      models: [
+        {
+          id: "default",
+          name: "Cybertron",
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: CONTEXT_WINDOW_HARD_MIN_TOKENS,
+          maxTokens: 8192,
+        },
+      ],
+    },
+  };
+}
+
 export async function resolveImplicitProviders(
   params: ImplicitProviderParams,
 ): Promise<ModelsConfig["providers"]> {
@@ -856,6 +887,7 @@ export async function resolveImplicitProviders(
   mergeImplicitProviderSet(providers, await resolveCloudflareAiGatewayImplicitProvider(context));
   mergeImplicitProviderSet(providers, await resolveOllamaImplicitProvider(context));
   mergeImplicitProviderSet(providers, await resolveVllmImplicitProvider(context));
+  mergeImplicitProviderSet(providers, resolveCybertronImplicitProvider(context));
 
   if (!providers["github-copilot"]) {
     const implicitCopilot = await resolveImplicitCopilotProvider({
