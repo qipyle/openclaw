@@ -3,6 +3,7 @@ import type { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { ModelDefinitionConfig } from "../../config/types.js";
 import { resolveOpenClawAgentDir } from "../agent-paths.js";
+import { CONTEXT_WINDOW_HARD_MIN_TOKENS } from "../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
 import { buildModelAliasLines } from "../model-alias-lines.js";
 import { isSecretRefHeaderValueMarker } from "../model-auth-markers.js";
@@ -216,6 +217,32 @@ export function resolveModelWithRegistry(params: {
         maxTokens: 8192,
       } as Model<Api>,
     });
+  }
+
+  // Cybertron is config-driven; resolve from config.cybertron when not in registry
+  // (e.g. models.json was generated before config had cybertron or different agentDir).
+  if (normalizedProvider === "cybertron" && modelId === "default") {
+    const cybertron = cfg?.cybertron;
+    const hasUrl = Boolean(
+      (typeof cybertron?.wsUrl === "string" && cybertron.wsUrl.trim()) ||
+        (typeof cybertron?.baseUrl === "string" && cybertron.baseUrl.trim()),
+    );
+    if (hasUrl) {
+      return normalizeResolvedModel({
+        provider,
+        model: {
+          id: "default",
+          name: "Cybertron",
+          api: "cybertron",
+          provider,
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: CONTEXT_WINDOW_HARD_MIN_TOKENS,
+          maxTokens: 8192,
+        } as Model<Api>,
+      });
+    }
   }
 
   const configuredModel = providerConfig?.models?.find((candidate) => candidate.id === modelId);

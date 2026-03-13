@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveUserPath } from "../../utils.js";
 
 const {
   hookRunner,
@@ -317,15 +318,16 @@ describe("compactEmbeddedPiSessionDirect hooks", () => {
   });
 
   it("bootstraps runtime plugins with the resolved workspace", async () => {
+    const workspaceDir = "/tmp/workspace";
     await compactEmbeddedPiSessionDirect({
       sessionId: "session-1",
       sessionFile: "/tmp/session.jsonl",
-      workspaceDir: "/tmp/workspace",
+      workspaceDir,
     });
 
     expect(ensureRuntimePluginsLoaded).toHaveBeenCalledWith({
       config: undefined,
-      workspaceDir: "/tmp/workspace",
+      workspaceDir: resolveUserPath(workspaceDir),
     });
   });
 

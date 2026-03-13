@@ -6,6 +6,7 @@ vi.mock("../pi-model-discovery.js", () => ({
 }));
 
 import type { OpenClawConfig } from "../../config/config.js";
+import { CONTEXT_WINDOW_HARD_MIN_TOKENS } from "../context-window-guard.js";
 import { buildInlineProviderModels, resolveModel } from "./model.js";
 import {
   buildOpenAICodexForwardCompatExpectation,
@@ -414,6 +415,30 @@ describe("resolveModel", () => {
       contextWindow: 262144,
       maxTokens: 65536,
     });
+  });
+
+  it("resolves cybertron/default from config.cybertron when not in registry", () => {
+    const cfg = {
+      cybertron: { wsUrl: "wss://example.com/ws" },
+    } as OpenClawConfig;
+    const result = resolveModel("cybertron", "default", "/tmp/agent", cfg);
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "cybertron",
+      id: "default",
+      api: "cybertron",
+      name: "Cybertron",
+      input: ["text"],
+      contextWindow: CONTEXT_WINDOW_HARD_MIN_TOKENS,
+      maxTokens: 8192,
+    });
+  });
+
+  it("does not resolve cybertron when config.cybertron has no url", () => {
+    const cfg = { cybertron: { username: "u", robotKey: "k" } } as OpenClawConfig;
+    const result = resolveModel("cybertron", "default", "/tmp/agent", cfg);
+    expect(result.model).toBeUndefined();
+    expect(result.error).toContain("Unknown model: cybertron/default");
   });
 
   it("prefers configured provider api metadata over discovered registry model", () => {

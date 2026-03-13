@@ -40,6 +40,8 @@ import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defa
 import { resolveOpenClawDocsPath } from "../docs-path.js";
 import { getApiKeyForModel, resolveModelAuthMode } from "../model-auth.js";
 import { supportsModelTools } from "../model-tool-support.js";
+import { createCybertronStreamFn } from "../cybertron-stream.js";
+import { readConfigFileSnapshot } from "../../config/io.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
 import { createConfiguredOllamaStreamFn } from "../ollama-stream.js";
 import { resolveOwnerDisplaySetting } from "../owner-display.js";
@@ -316,11 +318,31 @@ export async function compactEmbeddedPiSessionDirect(
   };
   const agentDir = params.agentDir ?? resolveOpenClawAgentDir();
   await ensureOpenClawModelsJson(params.config, agentDir);
+  // When resolving cybertron/default, use config from disk if runtime snapshot
+  // has no cybertron (e.g. gateway started before openclaw.json had cybertron).
+  let configForModel = params.config;
+  if (provider === "cybertron" && modelId === "default") {
+    const hasCybertronUrl = (c: typeof params.config) =>
+      Boolean(
+        (typeof c?.cybertron?.wsUrl === "string" && c.cybertron.wsUrl.trim()) ||
+          (typeof c?.cybertron?.baseUrl === "string" && c.cybertron.baseUrl.trim()),
+      );
+    if (!hasCybertronUrl(configForModel)) {
+      try {
+        const snapshot = await readConfigFileSnapshot();
+        if (snapshot.valid && snapshot.config?.cybertron && hasCybertronUrl(snapshot.config)) {
+          configForModel = { ...configForModel, cybertron: snapshot.config.cybertron };
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
   const { model, error, authStorage, modelRegistry } = resolveModel(
     provider,
     modelId,
     agentDir,
-    params.config,
+    configForModel,
   );
   if (!model) {
     const reason = error ?? `Unknown model: ${provider}/${modelId}`;
@@ -329,7 +351,7 @@ export async function compactEmbeddedPiSessionDirect(
   try {
     const apiKeyInfo = await getApiKeyForModel({
       model,
-      cfg: params.config,
+      cfg: configForModel,
       profileId: authProfileId,
       agentDir,
     });
@@ -443,7 +465,7 @@ export async function compactEmbeddedPiSessionDirect(
       modelProvider: model.provider,
       modelId,
       modelContextWindowTokens: ctxInfo.tokens,
-      modelAuthMode: resolveModelAuthMode(model.provider, params.config),
+      modelAuthMode: resolveModelAuthMode(model.provider, configForModel),
     });
     const tools = sanitizeToolsForGoogle({
       tools: supportsModelTools(model) ? toolsRaw : [],
@@ -657,6 +679,14 @@ export async function compactEmbeddedPiSessionDirect(
           createConfiguredOllamaStreamFn({
             model,
             providerBaseUrl,
+          }),
+        );
+      } else if (model.api === "cybertron") {
+        ensureCustomApiRegistered(
+          model.api,
+          createCybertronStreamFn({
+            cybertronConfig: configForModel?.cybertron,
+            sessionId: params.sessionId,
           }),
         );
       }

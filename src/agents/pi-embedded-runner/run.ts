@@ -36,6 +36,7 @@ import {
   type ResolvedProviderAuth,
 } from "../model-auth.js";
 import { normalizeProviderId } from "../model-selection.js";
+import { readConfigFileSnapshot } from "../../config/io.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
 import {
   formatBillingErrorMessage,
@@ -360,11 +361,32 @@ export async function runEmbeddedPiAgent(
         log.info(`[hooks] model overridden to ${modelId}`);
       }
 
+      // When resolving cybertron/default, use config from disk if runtime snapshot
+      // has no cybertron (e.g. gateway started before openclaw.json had cybertron).
+      let configForModel = params.config;
+      if (provider === "cybertron" && modelId === "default") {
+        const hasCybertronUrl = (c: typeof params.config) =>
+          Boolean(
+            (typeof c?.cybertron?.wsUrl === "string" && c.cybertron.wsUrl.trim()) ||
+              (typeof c?.cybertron?.baseUrl === "string" && c.cybertron.baseUrl.trim()),
+          );
+        if (!hasCybertronUrl(configForModel)) {
+          try {
+            const snapshot = await readConfigFileSnapshot();
+            if (snapshot.valid && snapshot.config?.cybertron && hasCybertronUrl(snapshot.config)) {
+              configForModel = { ...configForModel, cybertron: snapshot.config.cybertron };
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
       const { model, error, authStorage, modelRegistry } = resolveModel(
         provider,
         modelId,
         agentDir,
-        params.config,
+        configForModel,
       );
       if (!model) {
         throw new FailoverError(error ?? `Unknown model: ${provider}/${modelId}`, {
@@ -593,7 +615,7 @@ export async function runEmbeddedPiAgent(
       const resolveApiKeyForCandidate = async (candidate?: string) => {
         return getApiKeyForModel({
           model,
-          cfg: params.config,
+          cfg: model.provider === "cybertron" ? configForModel : params.config,
           profileId: candidate,
           store: authStore,
           agentDir,

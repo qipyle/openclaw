@@ -54,6 +54,7 @@ import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
 import { normalizeProviderId, resolveDefaultModelForAgent } from "../../model-selection.js";
 import { supportsModelTools } from "../../model-tool-support.js";
+import { createCybertronStreamFn } from "../../cybertron-stream.js";
 import { createConfiguredOllamaStreamFn } from "../../ollama-stream.js";
 import { createOpenAIWebSocketStreamFn, releaseWsSession } from "../../openai-ws-stream.js";
 import { resolveOwnerDisplaySetting } from "../../owner-display.js";
@@ -1529,6 +1530,13 @@ export async function runEmbeddedAttempt(
           log.warn(`[ws-stream] no API key for provider=${params.provider}; using HTTP transport`);
           activeSession.agent.streamFn = streamSimple;
         }
+      } else if (params.model.api === "cybertron" && params.provider === "cybertron") {
+        activeSession.agent.streamFn = createCybertronStreamFn({
+          cybertronConfig: params.config?.cybertron,
+          sessionId: params.sessionId,
+          signal: runAbortController.signal,
+        });
+        ensureCustomApiRegistered(params.model.api, activeSession.agent.streamFn);
       } else {
         // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
         activeSession.agent.streamFn = streamSimple;
